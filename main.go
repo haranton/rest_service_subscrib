@@ -1,15 +1,14 @@
 package main
 
 import (
-	"context"
 	"log"
 	"net/http"
-	"rest_service/internal/db/database"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-migrate/migrate/v4/database/postgres"
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"gorm.io/gorm"
 )
 
 type Subscriptions struct {
@@ -21,19 +20,24 @@ type Subscriptions struct {
 	EndDate     *time.Time `json:"end_date,omitempty"`
 }
 
-var db *pgxpool.Pool
+var db *gorm.DB
+
+func initDB() {
+
+	dsn := "host=localhost user=postgers password=123 dname=db port=5432 sslmode=disable"
+	var err error
+	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
+
+	if err != nil {
+		log.Fatalf("could not connect to database: %v", err)
+	}
+
+	if err := db.AutoMigrate(&Subscriptions{}); err != nil {
+		log.Fatalf("could not migrate: %v", err)
+	}
+}
 
 func main() {
-
-	if err := database.ConnectDB(); err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
-	}
-
-	defer database.CloseDB()
-
-	if err := database.RunMigrations(); err != nil {
-		log.Fatalf("Failed to apply migrations: %v", err)
-	}
 
 	r := gin.Default()
 
@@ -43,39 +47,35 @@ func main() {
 		})
 	})
 
-	subscriptions := r.Group("/subscriptions")
-	{
-		subscriptions.GET("", listSubscriptions)
-	}
-
+	r.GET("/subscriptions", listSubscriptions)
+	r.POST("/subscriptions", createSubscriptions)
+	r.GET("/subscriptions", getS)
 	r.Run(":8081")
-
-	// r.GET("/users", getAllUsers)
-	// r.GET("/users/:id", getUserByIDHandler)
-	// r.POST("/users", createUser)
-	// r.PUT("users/:id", updateUser)
-	// r.DELETE("users/:id", deleteUser)
-	// r.GET("/users/search", searchUsers)
 
 }
 
 func listSubscriptions(c *gin.Context) {
-	rows, err := db.Query(context.Background(), "Select * from subscriptions")
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-	}
-	defer rows.Close()
 
 	var subscriptions []Subscriptions
-	for rows.Next() {
-		var sub Subscriptions
-		if err := rows.Scan(&sub.ID, &sub.ServiceName, &sub.Price, &sub.UserID, &sub.StartDate, &sub.EndDate); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-		subscriptions = append(subscriptions, sub)
+
+	if err := db.Find(&subscriptions).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": "invalid request"})
 	}
 
 	c.JSON(http.StatusOK, subscriptions)
 
+}
+
+func createSubscriptions(c *gin.Context) {
+	var subscription Subscriptions
+	if err := c.ShouldBindJSON(&subscription); err != nil {
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	if err := db.Create(&subscription).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	c.JSON(http.StatusOK, subscription)
 }
