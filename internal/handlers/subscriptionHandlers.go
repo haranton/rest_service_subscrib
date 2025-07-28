@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"net/http"
 	subscriptionService "rest_service/internal/subscriptionService"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,218 +16,99 @@ func NewSubscriptionHadler(s subscriptionService.SubscriptionService) *Subscript
 	return &SubscriptionHadler{service: s}
 }
 
-func (h *SubscriptionHadler) ListSubscriptions1(c *gin.Context) error {
+func (h *SubscriptionHadler) ListSubscriptions(c *gin.Context) {
 
 	subs, err := h.service.ListSubscriptions()
 
-	// if err != nil {
-	// 	return c.JSON(http.StatusInternalServerError, map[string]string{"error": "err"})
-	// }
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "не удалось получить список подписок"})
+	}
 
-	// return c.JSON(http.StatusOK, subs)
+	c.JSON(http.StatusOK, subs)
+}
+
+func (h *SubscriptionHadler) CreateSubscription(c *gin.Context) {
+
+	var req subscriptionService.RequestBody
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+
+	sub, err := h.service.CreateSubscriptions(req)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+
+	}
+
+	c.JSON(http.StatusOK, sub)
+}
+
+func (h *SubscriptionHadler) GetSubscriptionByID(c *gin.Context) {
+
+	idstr := c.Param("id")
+
+	sub, err := h.service.GetSubscriptionByID(idstr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, sub)
 
 }
 
-// func createSubscriptions(c *gin.Context) {
+func (h *SubscriptionHadler) UpdateSubscriptionByID(c *gin.Context) {
 
-// 	var req RequestBody
-// 	if err := c.ShouldBindJSON(&req); err != nil {
-// 		c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-// 		return
-// 	}
+	var req subscriptionService.RequestBody
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
 
-// 	start, err := time.Parse("01-2006", req.StartDate)
-// 	if err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "неправильный формат start_date (ожидается MM-YYYY)"})
-// 		return
-// 	}
+	idstr := c.Param("id")
+	updatedSub, err := h.service.UpdateSubcriptionByID(req, idstr)
 
-// 	// Парсим дату окончания (если есть)
-// 	var end *time.Time
-// 	if req.EndDate != nil && *req.EndDate != "" {
-// 		parsedEnd, err := time.Parse("01-2006", *req.EndDate)
-// 		if err != nil {
-// 			c.JSON(http.StatusBadRequest, gin.H{"error": "неправильный формат end_date (ожидается MM-YYYY)"})
-// 			return
-// 		}
-// 		end = &parsedEnd
-// 	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
 
-// 	sub := Subscription{
-// 		ServiceName: req.ServiceName,
-// 		Price:       req.Price,
-// 		UserID:      req.UserID,
-// 		StartDate:   start,
-// 		EndDate:     end,
-// 	}
+	c.JSON(http.StatusOK, updatedSub)
+}
 
-// 	if err := db.Create(&sub).Error; err != nil {
-// 		c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-// 	}
+func (h *SubscriptionHadler) DeleteSubcriptionByID(c *gin.Context) {
 
-// 	c.JSON(http.StatusOK, sub)
-// }
+	idstr := c.Param("id")
 
-// func getSubscriptionByID(c *gin.Context) {
+	err := h.service.DeleteSubcriptionByID(idstr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 
-// 	idstr := c.Param("id")
-// 	id, err := strconv.Atoi(idstr)
-// 	if err != nil {
-// 		c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-// 	}
+	}
 
-// 	var sub Subscription
-// 	if err := db.First(&sub, "id = ?", id).Error; err != nil {
-// 		c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
-// 	}
+	c.JSON(http.StatusNoContent, "")
+}
 
-// 	c.JSON(http.StatusOK, sub)
+func (h *SubscriptionHadler) GetAmountOfsubscriptions(c *gin.Context) {
 
-// }
+	params := subscriptionService.RequestParametersСalculatingSum{
+		StartDate:   c.Query("start_date"),
+		EndDate:     c.Query("end_date"),
+		UserID:      c.Query("user_id"),
+		ServiceName: c.Query("name_service"),
+	}
 
-// func updateSubcriptionByID(c *gin.Context) {
+	total, err := h.service.GetAmountOfsubscriptions(params)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
 
-// 	var subscriptionReuest RequestBody
-// 	if err := c.ShouldBindJSON(&subscriptionReuest); err != nil {
-// 		c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-// 		return
-// 	}
+	c.JSON(http.StatusOK, gin.H{
+		"total_price": total,
+	})
 
-// 	idstr := c.Param("id")
-// 	id, err := strconv.Atoi(idstr)
-// 	if err != nil {
-// 		c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-// 	}
+}
 
-// 	var existingSub Subscription
-// 	if err := db.First(&existingSub, "id = ?", id).Error; err != nil {
-// 		c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
-// 	}
-
-// 	// Парсим даты
-// 	start, err := time.Parse("01-2006", subscriptionReuest.StartDate)
-// 	if err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "неправильный формат start_date"})
-// 		return
-// 	}
-
-// 	var end *time.Time
-// 	if subscriptionReuest.EndDate != nil && *subscriptionReuest.EndDate != "" {
-// 		parsedEnd, err := time.Parse("01-2006", *subscriptionReuest.EndDate)
-// 		if err != nil {
-// 			c.JSON(http.StatusBadRequest, gin.H{"error": "неправильный формат end_date"})
-// 			return
-// 		}
-// 		end = &parsedEnd
-// 	}
-
-// 	existingSub.ServiceName = subscriptionReuest.ServiceName
-// 	existingSub.Price = subscriptionReuest.Price
-// 	existingSub.UserID = subscriptionReuest.UserID
-// 	existingSub.StartDate = start
-// 	existingSub.EndDate = end
-
-// 	if err := db.Save(&existingSub).Error; err != nil {
-// 		c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-// 	}
-
-// 	c.JSON(http.StatusOK, existingSub)
-
-// }
-
-// func deleteSubcriptionByID(c *gin.Context) {
-
-// 	idstr := c.Param("id")
-// 	id, err := strconv.Atoi(idstr)
-// 	if err != nil {
-// 		c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
-// 	}
-
-// 	if err := db.Delete(&Subscription{}, "id =?", id).Error; err != nil {
-// 		c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-// 	}
-
-// 	c.JSON(http.StatusNoContent, "")
-// }
-
-// func getAmountOfsubscriptions(c *gin.Context) {
-
-// 	userIDStr := c.Query("user_id")
-// 	serviceName := c.Query("name_service")
-// 	startDateStr := c.Query("start_date")
-// 	endDateStr := c.Query("end_date")
-
-// 	startDate, err := time.Parse("01-2006", startDateStr)
-// 	if err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "start_date должен быть в формате MM-YYYY"})
-// 		return
-// 	}
-// 	endDate, err := time.Parse("01-2006", endDateStr)
-// 	if err != nil {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "end_date должен быть в формате MM-YYYY"})
-// 		return
-// 	}
-
-// 	if endDate.Before(startDate) {
-// 		c.JSON(http.StatusBadRequest, gin.H{"error": "end_date не может быть раньше start_date"})
-// 		return
-// 	}
-
-// 	query := db.Model(&Subscription{})
-
-// 	// Фильтрация по дате: пересечение диапазонов
-// 	query = query.Where("start_date <= ? AND (end_date IS NULL OR end_date >= ?)", endDate, startDate)
-
-// 	// Фильтрация по user_id
-// 	if userIDStr != "" {
-// 		userID, err := uuid.Parse(userIDStr)
-// 		if err != nil {
-// 			c.JSON(http.StatusBadRequest, gin.H{"error": "невалидный UUID"})
-// 			return
-// 		}
-// 		query = query.Where("user_id = ?", userID)
-// 	}
-
-// 	// Фильтрация по названию сервиса
-// 	if serviceName != "" {
-// 		query = query.Where("service_name = ?", serviceName)
-// 	}
-
-// 	var subscriptions []Subscription
-// 	if err := query.Find(&subscriptions).Error; err != nil {
-// 		c.JSON(http.StatusInternalServerError, gin.H{"error": "ошибка запроса к базе"})
-// 		return
-// 	}
-
-// 	total := 0
-// 	for _, s := range subscriptions {
-// 		// Рассчитываем количество месяцев пересечения
-// 		subStart := s.StartDate
-// 		subEnd := time.Now()
-// 		if s.EndDate != nil {
-// 			subEnd = *s.EndDate
-// 		}
-
-// 		// Ограничиваем период рамками фильтра
-// 		if subStart.Before(startDate) {
-// 			subStart = startDate
-// 		}
-// 		if subEnd.After(endDate) {
-// 			subEnd = endDate
-// 		}
-
-// 		months := monthsBetween(subStart, subEnd)
-// 		total += months * s.Price
-// 	}
-
-// 	c.JSON(http.StatusOK, gin.H{
-// 		"total_price": total,
-// 	})
-
-// }
-
-// func monthsBetween(start, end time.Time) int {
-// 	yearDiff := end.Year() - start.Year()
-// 	monthDiff := int(end.Month()) - int(start.Month())
-// 	return yearDiff*12 + monthDiff + 1 // +1, чтобы включить начальный месяц
-// }
+func monthsBetween(start, end time.Time) int {
+	yearDiff := end.Year() - start.Year()
+	monthDiff := int(end.Month()) - int(start.Month())
+	return yearDiff*12 + monthDiff + 1 // +1, чтобы включить начальный месяц
+}

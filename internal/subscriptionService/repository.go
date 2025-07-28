@@ -1,6 +1,9 @@
 package subscriptionService
 
-import "gorm.io/gorm"
+import (
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
 
 type SubscriptionRepository interface {
 	ListSubscriptions() ([]Subscription, error)
@@ -8,8 +11,7 @@ type SubscriptionRepository interface {
 	getSubscriptionByID(id string) (Subscription, error)
 	updateSubcriptionByID(sub Subscription) error
 	deleteSubcriptionByID(id string) error
-	//getAmountOfsubscriptions)
-
+	getAmountOfSubscriptions(params ParametersСalculatingSum) ([]Subscription, error)
 }
 
 type subRepository struct {
@@ -43,4 +45,26 @@ func (r *subRepository) updateSubcriptionByID(sub Subscription) error {
 
 func (r *subRepository) deleteSubcriptionByID(id string) error {
 	return r.db.Delete(&Subscription{}, "id = ?", id).Error
+}
+
+func (r *subRepository) getAmountOfSubscriptions(params ParametersСalculatingSum) ([]Subscription, error) {
+
+	query := r.db.Model(&Subscription{})
+
+	// Фильтрации
+	query = query.Where("start_date <= ? AND (end_date IS NULL OR end_date >= ?)", params.EndDate, params.StartDate)
+
+	if params.UserID != uuid.Nil {
+		query = query.Where("user_id = ?", params.UserID)
+	}
+	if params.ServiceName != "" {
+		query = query.Where("service_name = ?", params.ServiceName)
+	}
+
+	var subscriptions []Subscription
+	if err := query.Find(&subscriptions).Error; err != nil {
+		return nil, err
+	}
+
+	return subscriptions, nil
 }

@@ -8,13 +8,47 @@ import (
 	"gorm.io/gorm"
 )
 
+type Subscription struct {
+	ID          uint           `gorm:"primaryKey" json:"id"`
+	ServiceName string         `gorm:"not null" json:"service_name"`
+	Price       int            `gorm:"not null" json:"price"`
+	UserID      uuid.UUID      `gorm:"type:uuid;not null" json:"user_id"`
+	StartDate   time.Time      `gorm:"not null" json:"start_date"`
+	EndDate     *time.Time     `json:"end_date,omitempty"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+type RequestBody struct {
+	ServiceName string    `json:"service_name" binding:"required"`
+	Price       int       `json:"price" binding:"required"`
+	UserID      uuid.UUID `json:"user_id" binding:"required"`
+	StartDate   string    `json:"start_date" binding:"required"` // формат "MM-YYYY"
+	EndDate     *string   `json:"end_date,omitempty"`            // тоже "MM-YYYY"
+}
+
+type ParametersСalculatingSum struct {
+	StartDate   time.Time
+	EndDate     time.Time
+	UserID      uuid.UUID
+	ServiceName string
+}
+
+type RequestParametersСalculatingSum struct {
+	StartDate   string
+	EndDate     string
+	UserID      string
+	ServiceName string
+}
+
 type SubscriptionService interface {
 	ListSubscriptions() ([]Subscription, error)
 	CreateSubscriptions(r RequestBody) (Subscription, error)
 	GetSubscriptionByID(id string) (Subscription, error)
 	UpdateSubcriptionByID(r RequestBody, id string) (Subscription, error)
 	DeleteSubcriptionByID(id string) error
-	//getAmountOfsubscriptions)
+	GetAmountOfsubscriptions(RequestParametersСalculatingSum) (int, error)
 }
 
 type subService struct {
@@ -92,26 +126,71 @@ func (sub *subService) UpdateSubcriptionByID(req RequestBody, id string) (Subscr
 	return existingSub, nil
 }
 
-type Subscription struct {
-	ID          uint           `gorm:"primaryKey" json:"id"`
-	ServiceName string         `gorm:"not null" json:"service_name"`
-	Price       int            `gorm:"not null" json:"price"`
-	UserID      uuid.UUID      `gorm:"type:uuid;not null" json:"user_id"`
-	StartDate   time.Time      `gorm:"not null" json:"start_date"`
-	EndDate     *time.Time     `json:"end_date,omitempty"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
-}
-
 func (sub *subService) DeleteSubcriptionByID(id string) error {
 	return sub.repo.deleteSubcriptionByID(id)
 }
 
-type RequestBody struct {
-	ServiceName string    `json:"service_name" binding:"required"`
-	Price       int       `json:"price" binding:"required"`
-	UserID      uuid.UUID `json:"user_id" binding:"required"`
-	StartDate   string    `json:"start_date" binding:"required"` // формат "MM-YYYY"
-	EndDate     *string   `json:"end_date,omitempty"`            // тоже "MM-YYYY"
+func (subService *subService) GetAmountOfsubscriptions(params RequestParametersСalculatingSum) (int, error) {
+
+	startDate, err := time.Parse("01-2006", params.StartDate)
+	if err != nil {
+		return -1, errors.New("start_date должен быть в формате MM-YYYY")
+
+	}
+	endDate, err := time.Parse("01-2006", params.EndDate)
+	if err != nil {
+		return -1, errors.New("start_date должен быть в формате MM-YYYY")
+	}
+
+	if endDate.Before(startDate) {
+		return -1, errors.New("end_date не может быть раньше start_date")
+	}
+
+	userID := uuid.Nil
+	if params.UserID != "" {
+		var err error
+		userID, err = uuid.Parse(params.UserID)
+		if err != nil {
+			return -1, errors.New("невалидный UUID")
+		}
+	}
+
+	validParams := ParametersСalculatingSum{
+		StartDate:   startDate,
+		EndDate:     endDate,
+		UserID:      userID,
+		ServiceName: params.ServiceName,
+	}
+
+	subs, err := subService.repo.getAmountOfSubscriptions(validParams)
+
+	total := 0
+	for _, s := range subs {
+		// Рассчитываем количество месяцев пересечения
+		subStart := s.StartDate
+		subEnd := time.Now()
+		if s.EndDate != nil {
+			subEnd = *s.EndDate
+		}
+
+		// Ограничиваем период рамками фильтра
+		if subStart.Before(startDate) {
+			subStart = startDate
+		}
+		if subEnd.After(endDate) {
+			subEnd = endDate
+		}
+
+		months := monthsBetween(subStart, subEnd)
+		total += months * s.Price
+	}
+
+	return total, nil
+
+}
+
+func monthsBetween(start, end time.Time) int {
+	yearDiff := end.Year() - start.Year()
+	monthDiff := int(end.Month()) - int(start.Month())
+	return yearDiff*12 + monthDiff + 1 // +1, чтобы включить начальный месяц
 }
