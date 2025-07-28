@@ -1,6 +1,8 @@
 package subscriptionService
 
 import (
+	"log"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -23,7 +25,17 @@ func NewSubscriptionRepository(db *gorm.DB) SubscriptionRepository {
 }
 
 func (r *subRepository) createSubscriptions(sub Subscription) error {
-	return r.db.Create(&sub).Error
+
+	tx := r.db.Begin()
+	if err := tx.Create(&sub).Error; err != nil {
+		tx.Rollback()
+		log.Printf("Ошибка: %v", err)
+		return err
+	}
+	tx.Commit()
+	log.Printf("Сохранено: %+v", sub)
+	return nil
+
 }
 
 func (r *subRepository) ListSubscriptions() ([]Subscription, error) {

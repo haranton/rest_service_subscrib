@@ -1,0 +1,60 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    container_name: postgres_db
+    environment:
+      POSTGRES_DB: db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    command: [
+      "-c", "fsync=on",
+      "-c", "synchronous_commit=on",
+      "-c", "full_page_writes=on",
+      "-c", "wal_level=logical",
+      "-c", "max_connections=200",
+      "-c", "shared_buffers=512MB",
+      "-c", "work_mem=16MB"
+    ]
+
+  rest_service:
+    build: .
+    container_name: rest_service
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "8081:8081"
+    env_file:
+      - .env
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_RETRY_INTERVAL: "5"
+      DB_MAX_RETRIES: "10"
+      PG_TRANSACTION_MODE: "read committed"  # Режим изоляции
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8081/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./postgres_data  # Относительный путь
