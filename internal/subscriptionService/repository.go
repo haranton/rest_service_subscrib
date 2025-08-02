@@ -1,6 +1,8 @@
 package subscriptionService
 
 import (
+	"errors"
+	"fmt"
 	"log"
 	"math"
 
@@ -61,12 +63,39 @@ func (r *subRepository) getSubscriptionByID(id string) (Subscription, error) {
 }
 
 func (r *subRepository) updateSubcriptionByID(sub Subscription) error {
+	var existingSub Subscription
+	result := r.db.First(&existingSub, "id = ?", sub.ID)
+
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("подписка с ID %d не найдена", sub.ID)
+		}
+		return result.Error
+	}
+
 	err := r.db.Save(&sub).Error
 	return err
 }
 
 func (r *subRepository) deleteSubcriptionByID(id string) error {
-	return r.db.Delete(&Subscription{}, "id = ?", id).Error
+	var sub Subscription
+	result := r.db.First(&sub, "id = ?", id)
+
+	if result.Error != nil {
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("подписка с ID %s не найдена", id)
+		}
+		return result.Error
+	}
+
+	// Удаляем только если подписка существует
+	result = r.db.Delete(&Subscription{}, "id = ?", id)
+	if result.Error != nil {
+		log.Printf("Ошибка удаления подписки ID %s: %v", id, result.Error)
+		return result.Error
+	}
+
+	return nil
 }
 
 func (r *subRepository) getAmountOfSubscriptions(params ParametersСalculatingSum) ([]Subscription, error) {

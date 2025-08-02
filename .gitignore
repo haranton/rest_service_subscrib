@@ -1,0 +1,6 @@
+*.exe
+*.test
+*.prof
+*.vscode
+tmp
+postgres_data
