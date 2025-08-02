@@ -2,14 +2,15 @@ package subscriptionService
 
 import (
 	"log"
+	"math"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
 type SubscriptionRepository interface {
-	ListSubscriptions() ([]Subscription, error)
-	createSubscriptions(sub Subscription) error
+	ListSubscriptions(page, limit int) ([]Subscription, int64, int, error)
+	createSubscriptions(sub Subscription) (Subscription, error)
 	getSubscriptionByID(id string) (Subscription, error)
 	updateSubcriptionByID(sub Subscription) error
 	deleteSubcriptionByID(id string) error
@@ -24,24 +25,33 @@ func NewSubscriptionRepository(db *gorm.DB) SubscriptionRepository {
 	return &subRepository{db: db}
 }
 
-func (r *subRepository) createSubscriptions(sub Subscription) error {
+func (r *subRepository) createSubscriptions(sub Subscription) (Subscription, error) {
 
-	tx := r.db.Begin()
-	if err := tx.Create(&sub).Error; err != nil {
-		tx.Rollback()
-		log.Printf("Ошибка: %v", err)
-		return err
+	r.db = r.db.Debug()
+
+	if err := r.db.Create(&sub).Error; err != nil {
+		log.Printf("Ошибка создания подписки: %v", err)
+		return Subscription{}, err
 	}
-	tx.Commit()
 	log.Printf("Сохранено: %+v", sub)
-	return nil
-
+	return sub, nil
 }
 
-func (r *subRepository) ListSubscriptions() ([]Subscription, error) {
+func (r *subRepository) ListSubscriptions(page, limit int) ([]Subscription, int64, int, error) {
 	var subs []Subscription
-	err := r.db.Find(&subs).Error
-	return subs, err
+
+	offset := (page - 1) * limit
+
+	err := r.db.Offset(offset).Limit(limit).Find(&subs).Error
+
+	var totalItems int64
+	if err := r.db.Model(&Subscription{}).Count(&totalItems).Error; err != nil {
+		return nil, 0, 0, err
+	}
+
+	totalPages := int(math.Ceil(float64(totalItems) / float64(limit)))
+
+	return subs, totalItems, totalPages, err
 }
 
 func (r *subRepository) getSubscriptionByID(id string) (Subscription, error) {

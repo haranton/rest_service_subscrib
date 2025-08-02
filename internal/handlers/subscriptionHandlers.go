@@ -4,6 +4,7 @@ import (
 	"log"
 	"net/http"
 	subscriptionService "rest_service/internal/subscriptionService"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -27,15 +28,29 @@ func NewSubscriptionHadler(s subscriptionService.SubscriptionService) *Subscript
 func (h *SubscriptionHadler) ListSubscriptions(c *gin.Context) {
 	log.Println("[ListSubscriptions] Вход в хендлер")
 
-	subs, err := h.service.ListSubscriptions()
+	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if err != nil || page < 1 {
+		log.Println("Неверные параметры запроса")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный номер страницы"})
+		return
+	}
+
+	limit, err := strconv.Atoi(c.DefaultQuery("limit", "10"))
+	if err != nil || page < 1 || limit > 100 {
+		log.Println("Неверное количество элементов")
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Некорректный количество элементов"})
+		return
+	}
+
+	paginatedResponse, err := h.service.ListSubscriptions(page, limit)
 	if err != nil {
 		log.Printf("[ListSubscriptions] Ошибка получения подписок: %v\n", err)
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "не удалось получить список подписок"})
 		return
 	}
 
-	log.Printf("[ListSubscriptions] Подписок получено: %d\n", len(subs))
-	c.JSON(http.StatusOK, subs)
+	log.Printf("[ListSubscriptions] Подписок получено: %d\n", len(paginatedResponse.Data))
+	c.JSON(http.StatusOK, paginatedResponse)
 }
 
 // CreateSubscription godoc
@@ -86,7 +101,7 @@ func (h *SubscriptionHadler) GetSubscriptionByID(c *gin.Context) {
 	sub, err := h.service.GetSubscriptionByID(idstr)
 	if err != nil {
 		log.Printf("[GetSubscriptionByID] Ошибка: %v\n", err)
-		c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		c.JSON(http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
 	}
 

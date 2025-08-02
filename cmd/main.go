@@ -2,11 +2,14 @@ package main
 
 import (
 	"log"
+	"os"
+	"path/filepath"
 	"rest_service/internal/db"
 	"rest_service/internal/handlers"
 	"rest_service/internal/subscriptionService"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 
 	swaggerFiles "github.com/swaggo/files"
 	ginSwagger "github.com/swaggo/gin-swagger"
@@ -23,6 +26,24 @@ import (
 // @host            localhost:8081
 // @BasePath        /
 func main() {
+
+	projectRoot, err := os.Getwd()
+	if err != nil {
+		log.Fatal("Ошибка получения текущей директории:", err)
+	}
+
+	// Поднимаемся на уровень выше, если мы в cmd/
+	if filepath.Base(projectRoot) == "cmd" {
+		projectRoot = filepath.Dir(projectRoot)
+	}
+
+	// Загружаем .env из корня проекта
+	envPath := filepath.Join(projectRoot, ".env")
+	if err := godotenv.Load(envPath); err != nil {
+		log.Println("Не удалось загрузить .env файл:", err)
+		// Не прерываем выполнение, возможно переменные заданы в системе
+	}
+
 	db, err := db.InitDB()
 	if err != nil {
 		log.Fatalf("could not connect database: %v", err)

@@ -36,6 +36,8 @@ func InitDB() (*gorm.DB, error) {
 		Logger: logger.Default.LogMode(logger.Info),
 	})
 
+	db.Logger = logger.Default.LogMode(logger.Info)
+
 	if err != nil {
 		log.Fatalf("could not connect to database: %v", err)
 	}

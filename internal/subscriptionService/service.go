@@ -2,6 +2,7 @@ package subscriptionService
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -9,14 +10,14 @@ import (
 )
 
 type Subscription struct {
-	ID          uint           `gorm:"primaryKey" json:"id"`
+	ID          uint           `gorm:"primaryKey;autoIncrement" json:"id"`
 	ServiceName string         `gorm:"not null" json:"service_name"`
 	Price       int            `gorm:"not null" json:"price"`
 	UserID      uuid.UUID      `gorm:"type:uuid;not null" json:"user_id"`
 	StartDate   time.Time      `gorm:"not null" json:"start_date"`
 	EndDate     *time.Time     `json:"end_date,omitempty"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
+	CreatedAt   time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt   time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
@@ -42,8 +43,20 @@ type RequestParametersСalculatingSum struct {
 	ServiceName string
 }
 
+type PaginatedResponse struct {
+	Data []Subscription `json:"data"`
+	Meta PaginationMeta `json:"meta"`
+}
+
+type PaginationMeta struct {
+	Page       int   `json:"page"`
+	Limit      int   `json:"limit"`
+	TotalItems int64 `json:"totalItems"`
+	TotalPages int   `json:"totalPages"`
+}
+
 type SubscriptionService interface {
-	ListSubscriptions() ([]Subscription, error)
+	ListSubscriptions(page, limit int) (PaginatedResponse, error)
 	CreateSubscriptions(r RequestBody) (Subscription, error)
 	GetSubscriptionByID(id string) (Subscription, error)
 	UpdateSubcriptionByID(r RequestBody, id string) (Subscription, error)
@@ -59,8 +72,23 @@ func NewSubscriptionService(r SubscriptionRepository) SubscriptionService {
 	return &subService{repo: r}
 }
 
-func (sub *subService) ListSubscriptions() ([]Subscription, error) {
-	return sub.repo.ListSubscriptions()
+func (sub *subService) ListSubscriptions(page, limit int) (PaginatedResponse, error) {
+
+	subscriptions, totalItems, totalPages, err := sub.repo.ListSubscriptions(page, limit)
+	if err != nil {
+		return PaginatedResponse{}, fmt.Errorf("failed to get subscriptions: %w", err)
+	}
+
+	response := PaginatedResponse{
+		Data: subscriptions,
+		Meta: PaginationMeta{
+			Page:       page,
+			Limit:      limit,
+			TotalItems: totalItems,
+			TotalPages: totalPages,
+		},
+	}
+	return response, nil
 }
 
 func (sub *subService) CreateSubscriptions(req RequestBody) (Subscription, error) {
@@ -88,7 +116,12 @@ func (sub *subService) CreateSubscriptions(req RequestBody) (Subscription, error
 		EndDate:     end,
 	}
 
-	return subNew, err
+	subCreated, err := sub.repo.createSubscriptions(subNew)
+	if err != nil {
+		return Subscription{}, errors.New("Ошибка при создании подписки")
+	}
+
+	return subCreated, err
 
 }
 
